@@ -1,0 +1,1 @@
+{"Modules":[{"Key":"iam_sleuth","Source":"registry.terraform.io/trussworks/lambda/aws","Version":"2.2.3","Dir":".infracost\\terraform_modules\\iam_sleuth"}]}

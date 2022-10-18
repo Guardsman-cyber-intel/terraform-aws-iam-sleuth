@@ -1,81 +1,45 @@
-#
-# Simple IAM Sleuth deployment
-#
-# No Slack or SNS notifications
-
 module "iam_sleuth" {
-  source                 = "trussworks/lambda/aws"
-  version                = "2.2.3"
-  name                   = "iam-sleuth"
+  source                 = "git@github.com:Guardsman-cyber-intel/terraform-aws-lambda.git" #TODO: add our github source. Lambda AWS
+  version                = "2.2.0"
+  name                   = "iam_sleuth"
   handler                = "handler.handler"
-  job_identifier         = "test"
+  job_identifier         = "iam_sleuth"
   runtime                = "python3.8"
   timeout                = "500"
   role_policy_arns_count = 2
-  role_policy_arns = [aws_iam_policy.sleuth_policy.arn,
-    "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"]
+  role_policy_arns = ["${aws_iam_policy.sleuth_policy.arn}",
+  "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"]
 
-  github_project  = "trussworks/aws-iam-sleuth"
+  github_project  = "Guardsman-cyber-intel/terraform-aws-iam-sleuth" #TODO: fork this project as well, 2nd fork 
   github_filename = "deployment.zip"
-  github_release  = var.github_release
+  github_release  = "v1.0.10"
 
-  validation_sha = var.validation_sha
+  validation_sha = "280b88b3569dbb51711879e49325a88599739010" #TODO: get sha to validate here. (done)
 
   source_types = ["events"]
-  source_arns  = [aws_cloudwatch_event_rule.lambda_rule_trigger.arn]
-
+  source_arns  = ["${aws_cloudwatch_event_rule.sleuth_lambda_rule_trigger.arn}"]
 
   env_vars = {
-    ENABLE_AUTO_EXPIRE  = false
+    ENABLE_AUTO_EXPIRE  = "false"
     EXPIRATION_AGE      = 90
-    WARNING_AGE         = 85
+    WARNING_AGE         = 50
+    EXPIRE_NOTIFICATION_TITLE           = "Key Rotation Instructions"
+    EXPIRE_NOTIFICATION_TEXT            = "Please run.\n ```aws-vault rotate AWS-PROFILE```"
     INACTIVITY_AGE       = 30
-    INACTIVITY_WARNING_AGE       = 20
-    MSG_TITLE           = "Key Rotation Instructions"
-    MSG_TEXT            = "Please run key rotation tool!"
-  }
-}
-
-
-#
-# Cloudwatch Event
-#
- resource "aws_cloudwatch_event_rule" "lambda_rule_trigger" {
-   name        = "iam-sleuth-trigger"
-   description = "Trigger to audit IAM keys"
-
-   schedule_expression = "cron(0 18 ? * MON-FRI *)"
- }
-
-#
-# IAM
-#
-
-data "aws_iam_policy_document" "basic_task_role_policy_doc" {
-  # Allow to list and disable keys
-  statement {
-    actions = [
-      "iam:UpdateAccessKey",
-      "iam:ListAccessKeys",
-      "iam:ListUserTags",
-      "iam:GetAccessKeyLastUsed",
-    ]
-
-    resources = ["arn:aws:iam::*:user/*"]
+    INACTIVITY_WARNING_AGE = 20
+    INACTIVE_NOTIFICATION_TITLE         = "Key Usage Instructions to prevent key auto-disable"
+    INACTIVE_NOTIFICATION_TEXT          = "Please run.\n ```aws-vault login AWS-PROFILE```"
+    SLACK_URL           = data.aws_ssm_parameter.slack_url.value
+    SNS_TOPIC           = ""
   }
 
-  # Allow to list and disable keys
-  statement {
-    actions = [
-      "iam:ListUsers",
-    ]
+  resource "sleuth_trigger" "key_rotation" {
+    
+    name = "key_rotation"
 
-    resources = ["*"]
+    tags = {
+      SlackID      = "U03TY9ZBKDG"
+      "Service" = "iam_sleuth"
+    }
   }
-}
-
-resource "aws_iam_policy" "sleuth_policy" {
-  name        = "aws-iam-sleuth-policy"
-  description = "Policy for IAM sleuth lambda checker"
-  policy      = data.aws_iam_policy_document.basic_task_role_policy_doc.json
 }
